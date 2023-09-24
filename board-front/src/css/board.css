@@ -1,0 +1,23 @@
+.fdb_lst_ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: #fff;
+}
+
+.bd, .bd .clear {
+    display: block;
+    position: relative;
+    clear: both;
+}
+.fdb_itm {
+    padding-left: 10px!important;
+}
+.fdb_itm {
+    position: relative;
+    margin: -1px 0;
+    padding: 11px 11px 10px 88px;
+    border-top: 1px solid #eee;
+    border-bottom: 1px solid #eee;
+    background-color: inherit;
+}
