@@ -12,6 +12,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import study.board.board.dto.BoardModifyDto;
 import study.board.board.dto.BoardResponseDto;
+import study.board.board.dto.CommentModifyDto;
 import study.board.board.view.BoardShowView;
 import study.board.board.view.BoardViewJpaRepository;
 import study.board.entity.Board;
@@ -197,9 +198,6 @@ class BoardServiceTest {
     when(boardRepository.findById(1L)).thenReturn(Optional.of(board));
     when(boardRepository.findById(2L)).thenThrow(new IllegalArgumentException("존재하지 않는 게시글입니다."));
 
-    //이용자
-    when(boardViewRepository.countBoardViewByMember_IdAndBoard_Id(member.getId(),board.getId())).thenReturn(0);
-
     //댓글
     when(boardCommentRepository.findAllByBoardIdAndParentIsNull(board.getId())).thenReturn(boardComments);
     
@@ -208,8 +206,54 @@ class BoardServiceTest {
             .isExactlyInstanceOf(IllegalArgumentException.class).hasMessage("존재하지 않는 게시글입니다.");
 
     BoardResponseDto boardInfo = boardService.getBoardInfo(board.getId(), member.getId());
-    System.out.println(boardInfo);
     //then
+    assertThat(boardInfo).isNotNull();
+    assertThat(boardInfo.getTitle()).isEqualTo("아파트 주차비 논란");
+    assertThat(boardInfo.getContent()).isEqualTo("아파트 주차비 논란에 대한 내용입니다.");
+    assertThat(boardInfo.getMemberId()).isEqualTo(1L);
+    assertThat(boardInfo.getUserId()).isEqualTo("kim99");
+  }
+
+  @Test
+  @DisplayName("댓글 입력 수정 삭제 테스트")
+  void testComment(){
+    //given
+    Member member = Member.builder().name("김철수").userId("kim99").id(1L).build();
+    Board board = Board.builder().title("아파트 주차비 논란").content("아파트 주차비 논란에 대한 내용입니다.").member(member).id(1L).build();
+    List<BoardComment> boardComments = new ArrayList<>();
+    BoardComment parentComment = null;
+    for(int i = 0 ; i< 10 ; i++){
+      Member saveMember = Member.builder().name("김철수"+i).userId("kim99"+i).build();
+      BoardComment comment = BoardComment.builder().member(saveMember).board(board).content("댓글입니다."+i).id((long) i).build();
+      if( i%5 != 0 && i < 5)parentComment = comment;
+      else if(i%5 != 0 )parentComment = comment;
+      if(i == 5) parentComment = null;
+      comment.setParent(parentComment);
+      if(i%5 == 0)boardComments.add(comment);
+    }
+
+    CommentModifyDto commentModifyDto = CommentModifyDto.builder().boardId(2L).memberId(1L).content("댓글입니다.").build();
+
+    //when
+    //게시글 조회
+    when(boardRepository.findById(1L)).thenReturn(Optional.of(board));
+    when(boardRepository.findById(2L)).thenThrow(new IllegalArgumentException("존재하지 않는 게시글입니다."));
+
+    //회원 조회
+    when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+    when(memberRepository.findById(2L)).thenThrow(new IllegalArgumentException("존재하지 않는 회원입니다."));
+
+    //then
+    assertThatThrownBy(() -> boardService.saveComment(commentModifyDto))
+            .isExactlyInstanceOf(IllegalArgumentException.class).hasMessage("존재하지 않는 게시글입니다.");
+
+    commentModifyDto.setBoardId(1L);
+    commentModifyDto.setMemberId(2L);
+    assertThatThrownBy(() -> boardService.saveComment(commentModifyDto))
+            .isExactlyInstanceOf(IllegalArgumentException.class).hasMessage("존재하지 않는 회원입니다.");
+
+    commentModifyDto.setMemberId(1L);
+    boardService.saveComment(commentModifyDto);
   }
 
 

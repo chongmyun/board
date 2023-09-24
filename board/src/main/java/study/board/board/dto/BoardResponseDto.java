@@ -1,6 +1,7 @@
 package study.board.board.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 import study.board.entity.Board;
@@ -37,7 +38,9 @@ public class BoardResponseDto {
         this.title = board.getTitle();
         this.content = board.getContent();
         this.viewCount = board.getViewCount();
-        this.createdDate = board.getCreatedDate().format(dataTimeFormatter);
+        if(board.getCreatedDate() != null){
+            this.createdDate = board.getCreatedDate().format(dataTimeFormatter);
+        }
         this.commentCount = board.getBoardComments().size();
     }
 
