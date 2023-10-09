@@ -1,4 +1,4 @@
-package study.config;
+package study.board.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;

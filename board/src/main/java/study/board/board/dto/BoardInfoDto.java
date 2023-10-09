@@ -1,6 +1,7 @@
 package study.board.board.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.querydsl.core.annotations.QueryProjection;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
@@ -14,7 +15,7 @@ import java.util.List;
 
 @Getter
 @ToString
-public class BoardResponseDto {
+public class BoardInfoDto {
 
     @JsonIgnore
     private final DateTimeFormatter dataTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -28,9 +29,9 @@ public class BoardResponseDto {
     private int viewCount;
     private int commentCount;
 
-    private List<CommentResultDto> comments = new ArrayList<>();
+    private List<CommentListDto> comments = new ArrayList<>();
 
-    public BoardResponseDto(Board board){
+    public BoardInfoDto(Board board){
         Member member = board.getMember();
         this.boardId = board.getId();
         this.memberId = member.getId();
@@ -44,7 +45,24 @@ public class BoardResponseDto {
         this.commentCount = board.getBoardComments().size();
     }
 
-    public void addComment(List<CommentResultDto> commentResultDto){
-        this.comments.addAll(commentResultDto);
+    @Builder
+    @QueryProjection
+    public BoardInfoDto(Long boardId, Long memberId, String userId, String title, String content, LocalDateTime createdDate, int viewCount, int commentCount) {
+        this.boardId = boardId;
+        this.memberId = memberId;
+        this.userId = userId;
+        this.title = title;
+        this.content = content;
+        this.viewCount = viewCount;
+        this.commentCount = commentCount;
+        if(createdDate != null){
+            this.createdDate = createdDate.format(dataTimeFormatter);
+        }
+    }
+
+
+
+    public void addComment(List<CommentListDto> commentListDto){
+        this.comments.addAll(commentListDto);
     }
 }

@@ -4,20 +4,22 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import study.board.board.cond.BoardSearchCondition;
+import study.board.board.dto.BoardInfoDto;
 import study.board.board.dto.BoardModifyDto;
-import study.board.board.dto.BoardResponseDto;
 import study.board.board.dto.CommentModifyDto;
-import study.board.board.dto.CommentResultDto;
-import study.board.board.view.BoardShowView;
-import study.board.entity.Board;
-import study.board.entity.BoardComment;
-import study.board.entity.CommentStatus;
-import study.board.entity.Member;
+import study.board.board.dto.CommentListDto;
+import study.board.board.cache.BoardCaching;
+import study.board.entity.*;
+import study.board.file.FileInfoDto;
+import study.board.file.FileUtil;
 import study.board.member.MemberJpaRepository;
 
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 
@@ -32,7 +34,11 @@ public class BoardService {
 
     private final MemberJpaRepository memberRepository;
 
-    private final BoardShowView boardShowView;
+    private final BoardCaching boardCaching;
+
+    private final FileUtil fileUtil;
+
+
 
     @PostConstruct
     public void init(){
@@ -40,6 +46,8 @@ public class BoardService {
         memberRepository.save(member);
         for(int i= 0 ; i < 100 ; i++){
             Board board = Board.builder().member(member).title("제목" + i).content("내용" + i).build();
+            BoardDetail boardDetail = BoardDetail.builder().detailContent("내용 입력").build();
+            board.addBoardDetail(boardDetail);
             boardRepository.save(board);
         }
     }
@@ -47,7 +55,7 @@ public class BoardService {
     /**
      * 게시글 저장
      * */
-    public BoardResponseDto saveBoard(BoardModifyDto boardModifyDto){
+    public BoardInfoDto saveBoard(BoardModifyDto boardModifyDto){
         Member findMember = memberRepository.findById(boardModifyDto.getMemberId())
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
@@ -55,13 +63,24 @@ public class BoardService {
                 .member(findMember).build();
 
         Board saveBoard = boardRepository.save(board);
-        return new BoardResponseDto(saveBoard);
+
+        String contentFileList = boardModifyDto.getContentFileList();
+        if(StringUtils.hasText(contentFileList)){
+            String[] fileNames = contentFileList.split(",");
+            for(String fileName : fileNames){
+                FileInfoDto fileInfoDto = fileUtil.moveTempFile(fileName, saveBoard.getId());
+                BoardFiles boardFiles = new BoardFiles(fileInfoDto);
+                saveBoard.addBoardFiles(boardFiles);
+                boardRepository.saveBoardFiles(boardFiles);
+            }
+        }
+        return new BoardInfoDto(saveBoard);
     }
 
     /**
      * 게시글 수정
      * */
-    public BoardResponseDto updateBoard(Long boardId,BoardModifyDto boardModifyDto){
+    public BoardInfoDto updateBoard(Long boardId, BoardModifyDto boardModifyDto){
         Board toUpdateBoard = boardRepository.findById(boardId).
                 orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
 
@@ -71,8 +90,10 @@ public class BoardService {
         }
 
         toUpdateBoard.updateBoard(boardModifyDto);
+        Integer viewCount = boardCaching.updateViewCount(toUpdateBoard.getId());
+        if(viewCount != null) toUpdateBoard.addViewCount(viewCount);
 
-        return new BoardResponseDto(toUpdateBoard);
+        return new BoardInfoDto(toUpdateBoard);
     }
 
 
@@ -87,34 +108,27 @@ public class BoardService {
             throw new IllegalArgumentException("게시글 작성자만 삭제할 수 있습니다.");
         }
 
-        Long id = toDeleteBoard.getId();
-        boardRepository.delete(toDeleteBoard);
-
-        return id;
+        boardRepository.softDeleteBoard(boardId);
+        return boardId;
     }
 
     /**
      * 게시글 목록
      * */
-    public Page<BoardResponseDto> getBoards( Pageable pageable){
-        //TODO 나중에 queryDsl 을 이용해서 join fetch로 변경
-        Page<Board> boards = boardRepository.findAllBy(pageable);
-
-        return boards.map(BoardResponseDto::new);
+    public Page<BoardInfoDto> getBoards(Pageable pageable, BoardSearchCondition condition){
+        //TODO 나중에 queryDsl 을 이용해서 join fetch로 변경 -> dto로 변환
+        return boardRepository.findBoardList(pageable,condition);
     }
 
     /**
      * 게시글 상세보기
      * */
-    public BoardResponseDto getBoardInfo(Long boardId,Long memberId){
-        Board board = boardRepository.findById(boardId).
-                orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
+    public BoardInfoDto getBoardInfo(Long boardId, Long memberId){
 
-        boardShowView.showBoard(board,memberId);
-        List<CommentResultDto> comments = getComments(boardId);
-        BoardResponseDto boardResponseDto = new BoardResponseDto(board);
-        boardResponseDto.addComment(comments);
-        return boardResponseDto;
+        BoardInfoDto boardInfoDto = boardCaching.showBoard(boardId, memberId);
+        List<CommentListDto> comments = getCommentsAdvance(boardId);
+        boardInfoDto.addComment(comments);
+        return boardInfoDto;
     }
 
     /**
@@ -180,10 +194,46 @@ public class BoardService {
      * 입력,수정,삭제 후에 댓글 목록 조회 (이 메소드는 트랜잭션에 묶이면 안된다)
      * */
     @Transactional(readOnly = true)
-    public List<CommentResultDto> getComments(Long boardId){
+    public List<CommentListDto> getComments(Long boardId){
         List<BoardComment> boardComments = boardCommentRepository.findAllByBoardIdAndParentIsNull(boardId);
-        return boardComments.stream().map(CommentResultDto::of).collect(Collectors.toList());
+        return boardComments.stream().map(CommentListDto::of).collect(Collectors.toList());
     }
+
+    @Transactional(readOnly = true)
+    public List<CommentListDto> getCommentsAdvance(Long boardId){
+        List<CommentListDto> commentList = boardRepository.findCommentList(boardId);
+        List<CommentListDto> resultList = new ArrayList<>();
+
+        HashMap<Long, List<CommentListDto>> collect = commentList.stream().collect(Collectors.toMap(
+                CommentListDto::getParentId,
+                x -> {
+                    List<CommentListDto> subList = new ArrayList<>();
+                    System.out.println(x);
+                    subList.add(x);
+                    return subList;
+                },
+                (left, right) -> {
+                    System.out.println(right);
+                    left.addAll(right);
+                    return left;
+                },
+                HashMap::new
+        ));
+
+        for(Long key : collect.keySet()){
+            List<CommentListDto> commentListDtos = collect.get(key);
+            for(CommentListDto commentListDto : commentListDtos){
+                List<CommentListDto> children = collect.get(commentListDto.getCommentId());
+                if(children != null) commentListDto.getChild().addAll(children);
+
+            }
+            if(key == null) resultList.addAll(commentListDtos);
+        }
+
+        return resultList;
+
+    }
+
 
 
 }

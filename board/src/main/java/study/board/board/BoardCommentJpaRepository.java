@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface BoardCommentJpaRepository extends JpaRepository<BoardComment,Long> {
   List<BoardComment> findAllByBoardIdAndParentIsNull(Long boardId);
+
+  List<BoardComment> findAllByBoardId(Long boardId);;
 }

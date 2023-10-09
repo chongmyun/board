@@ -18,4 +18,6 @@ public class BoardModifyDto {
     private String title;
 
     private String content;
+
+    private String contentFileList;
 }

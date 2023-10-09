@@ -6,20 +6,24 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import study.board.board.cond.BoardSearchCondition;
+import study.board.board.dto.BoardInfoDto;
 import study.board.board.dto.BoardModifyDto;
+import study.board.config.QueryDslConfig;
 import study.board.entity.Board;
 import study.board.entity.BoardComment;
 import study.board.entity.Member;
 import study.board.member.MemberJpaRepository;
 
-import java.awt.print.Pageable;
-import java.util.Optional;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
+@Import({QueryDslConfig.class})
 class BoardJpaRepositoryTest {
 
   @Autowired
@@ -39,6 +43,9 @@ class BoardJpaRepositoryTest {
     //회원 입력
     Member member = Member.builder().name("member1").password("1234").userId("chdaud33").build();
     memberRepository.save(member);
+
+    Member member2 = Member.builder().name("member2").password("1234").userId("wldud9187").build();
+    memberRepository.save(member2);
 
   }
 
@@ -111,12 +118,14 @@ class BoardJpaRepositoryTest {
 
     //when
     PageRequest pageRequest = PageRequest.of(0,10);
-    Page<Board> boards = boardRepository.findAllBy(pageRequest);
+    BoardSearchCondition condition = new BoardSearchCondition();
+    condition.setTitle("아파트 주차비 논란1");
+    Page<BoardInfoDto> boards = boardRepository.findBoardList(pageRequest,condition);
     //then
 
-    assertThat(boards.getTotalElements()).isEqualTo(10);
+    assertThat(boards.getTotalElements()).isEqualTo(1);
     assertThat(boards.getTotalPages()).isEqualTo(1);
-    assertThat(boards.getContent().get(0).getTitle()).isEqualTo("아파트 주차비 논란0");
+    assertThat(boards.getContent().get(0).getTitle()).isEqualTo("아파트 주차비 논란1");
 
   }
 
@@ -190,6 +199,33 @@ class BoardJpaRepositoryTest {
     //then
     assertThat(comment).isNotNull();
 
+  }
+
+  @Test
+  @DisplayName("게시판 목록 조회")
+  void findBoardList(){
+    Member member = memberRepository.findByUserId("chdaud33").get();
+    Member member2 = memberRepository.findByUserId("wldud9187").get();
+    //given
+    for( int i = 0 ; i <10 ; i++){
+      Board board = null;
+      if( i % 2 == 0){
+        board = Board.builder().title("제목"+i).content("내용"+i).member(member).build();
+      }else{
+        board = Board.builder().title("제목"+i).content("내용"+i).member(member2).build();
+      }
+      boardRepository.save(board);
+    }
+    //when
+    PageRequest pageAble = PageRequest.of(0, 10);
+    BoardSearchCondition condition = new BoardSearchCondition();
+//    condition.setMemberId(member.getId());
+    condition.setTitle("제목2");
+    List<BoardInfoDto> content = boardRepository.findBoardList(pageAble, condition).getContent();
+    //then
+    for (BoardInfoDto boardInfoDto : content) {
+      System.out.println("boardResponseDto = " + boardInfoDto.getTitle());
+    }
   }
 
 }

@@ -10,11 +10,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import study.board.board.cond.BoardSearchCondition;
+import study.board.board.dto.BoardInfoDto;
 import study.board.board.dto.BoardModifyDto;
-import study.board.board.dto.BoardResponseDto;
 import study.board.board.dto.CommentModifyDto;
-import study.board.board.view.BoardShowView;
-import study.board.board.view.BoardViewJpaRepository;
+import study.board.board.cache.BoardCaching;
 import study.board.entity.Board;
 import study.board.entity.BoardComment;
 import study.board.entity.Member;
@@ -37,10 +37,7 @@ class BoardServiceTest {
   MemberJpaRepository memberRepository;
 
   @Mock
-  BoardViewJpaRepository boardViewRepository;
-
-  @Mock
-  BoardShowView boardShowView;
+  BoardCaching boardCaching;
 
   @Mock
   BoardCommentJpaRepository boardCommentRepository;;
@@ -74,7 +71,7 @@ class BoardServiceTest {
 
     // 등록된 이용자로 게시글 등록
     boardModifyDto.setMemberId(1L);
-    BoardResponseDto responseDto = boardService.saveBoard(boardModifyDto);
+    BoardInfoDto responseDto = boardService.saveBoard(boardModifyDto);
 
     //then
     assertThat(responseDto).isNotNull();
@@ -108,12 +105,12 @@ class BoardServiceTest {
     assertThatThrownBy(() -> boardService.updateBoard(savedBoard.getId(),boardModifyDto))
             .isExactlyInstanceOf(IllegalArgumentException.class).hasMessage("게시글 작성자만 수정할 수 있습니다.");
     boardModifyDto.setMemberId(1L);
-    BoardResponseDto boardResponseDto = boardService.updateBoard(savedBoard.getId(),boardModifyDto);
+    BoardInfoDto boardInfoDto = boardService.updateBoard(savedBoard.getId(),boardModifyDto);
     //then
 
-    assertThat(boardResponseDto).isNotNull();
-    assertThat(boardResponseDto.getTitle()).isEqualTo("아파트 주차비 논란");
-    assertThat(boardResponseDto.getContent()).isEqualTo("아파트 주차비 논란에 대한 내용입니다.");
+    assertThat(boardInfoDto).isNotNull();
+    assertThat(boardInfoDto.getTitle()).isEqualTo("아파트 주차비 논란");
+    assertThat(boardInfoDto.getContent()).isEqualTo("아파트 주차비 논란에 대한 내용입니다.");
     verify(boardRepository, times(3)).findById(any(Long.class));
   }
 
@@ -152,15 +149,16 @@ class BoardServiceTest {
   void getBoards(){
     //given
     PageRequest pageable = PageRequest.of(0, 10);
-    List<Board> boardList = new ArrayList<>();
+    List<BoardInfoDto> boardList = new ArrayList<>();
     for(int i = 0 ; i <10 ; i++){
       Member member = Member.builder().name("김철수"+i).userId("kim99"+i).build();
-      Board board = Board.builder().id((long) i).title("아파트 주차비 논란"+i).content("아파트 주차비 논란에 대한 내용입니다."+i).member(member).build();
+      BoardInfoDto board = BoardInfoDto.builder().boardId((long) i).title("아파트 주차비 논란"+i).content("아파트 주차비 논란에 대한 내용입니다."+i).memberId(member.getId()).build();
       boardList.add(board);
     }
-    when(boardRepository.findAllBy(pageable)).thenReturn(new PageImpl<>(boardList));
+    BoardSearchCondition condition = new BoardSearchCondition();
+    when(boardRepository.findBoardList(pageable,condition)).thenReturn(new PageImpl<>(boardList,pageable,10));
     //when
-    Page<BoardResponseDto> boards = boardService.getBoards(pageable);
+    Page<BoardInfoDto> boards = boardService.getBoards(pageable,condition);
     //then
     assertThat(boards).isNotNull();
     assertThat(boards.getTotalElements()).isEqualTo(10);
@@ -172,7 +170,7 @@ class BoardServiceTest {
       assertThat(boards.getContent().get(i).getContent()).isEqualTo("아파트 주차비 논란에 대한 내용입니다."+i);
     }
 
-    verify(boardRepository, times(1)).findAllBy(any(Pageable.class));
+    verify(boardRepository, times(1)).findBoardList(any(Pageable.class),eq(condition));
   }
 
   @Test
@@ -205,7 +203,7 @@ class BoardServiceTest {
     assertThatThrownBy(() -> boardService.getBoardInfo(2L,member.getId()))
             .isExactlyInstanceOf(IllegalArgumentException.class).hasMessage("존재하지 않는 게시글입니다.");
 
-    BoardResponseDto boardInfo = boardService.getBoardInfo(board.getId(), member.getId());
+    BoardInfoDto boardInfo = boardService.getBoardInfo(board.getId(), member.getId());
     //then
     assertThat(boardInfo).isNotNull();
     assertThat(boardInfo.getTitle()).isEqualTo("아파트 주차비 논란");
