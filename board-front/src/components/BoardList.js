@@ -48,6 +48,9 @@ export default function BoardList() {
           <h1 style={{ textAlign: "center", color: "green" }}>
               게시판 목록
           </h1>
+          <div style={{ textAlign: "right" }}>
+          <Link to={`/board/modify`}><button>글쓰기</button></Link>
+          </div>
           <TableContainer component={Paper}>
                 <Table sx={{ minWidth: 650 }} 
                     aria-label="simple table">

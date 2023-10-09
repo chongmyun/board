@@ -57,9 +57,8 @@ export default function BoardDetail() {
                       </div>
                       <div className="post-view-row">
                         <label>내용 </label>
-                        <span>
-                          {data.content}
-                        </span>
+                        <div dangerouslySetInnerHTML={{__html: data.content}}>
+                        </div>
                       </div>
                       {comments ? (<CommentArea comments={comments}></CommentArea>) : '댓글이 없습니다.'}
                     </>
